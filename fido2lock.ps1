@@ -20,19 +20,14 @@ function Lock-ActiveSession {
         }
 
         foreach ($proc in $explorerProcesses) {
-            Write-Log "Found explorer.exe in session $($proc.SessionId) — firing lock task"
+            Write-Log "Found explorer.exe in session $($proc.SessionId) — firing lock"
         }
 
-        $action    = New-ScheduledTaskAction -Execute "rundll32.exe" -Argument "user32.dll,LockWorkStation"
-        $principal = New-ScheduledTaskPrincipal -GroupId "BUILTIN\Users" -RunLevel Limited
-        $settings  = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds 30)
-
-        Register-ScheduledTask -TaskName "FIDO2LockNow" -Action $action `
-            -Principal $principal -Settings $settings -Force | Out-Null
-
-        Start-ScheduledTask -TaskName "FIDO2LockNow"
+        # Create, run and delete the task using schtasks.exe — no UI dependency
+        $null = & schtasks.exe /Create /TN "FIDO2LockNow" /TR "rundll32.exe user32.dll,LockWorkStation" /SC ONCE /ST 00:00 /RU "BUILTIN\Users" /IT /F 2>&1
+        $null = & schtasks.exe /Run /TN "FIDO2LockNow" 2>&1
         Start-Sleep -Seconds 2
-        Unregister-ScheduledTask -TaskName "FIDO2LockNow" -Confirm:$false
+        $null = & schtasks.exe /Delete /TN "FIDO2LockNow" /F 2>&1
 
         Write-Log "Lock task executed and cleaned up"
     } catch {
