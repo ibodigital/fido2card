@@ -1,9 +1,33 @@
-$triggerFile = Join-Path $env:TEMP "fido2trigger.txt"
-$logFile = Join-Path $env:TEMP "fido2lock.log"
+$triggerFile = "C:\ProgramData\fido2lock\trigger.txt"
+$logFile     = "C:\ProgramData\fido2lock\fido2lock.log"
+
+if (-not (Test-Path "C:\ProgramData\fido2lock")) {
+    New-Item -ItemType Directory -Path "C:\ProgramData\fido2lock" | Out-Null
+}
 
 function Write-Log($msg) {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Add-Content -Path $logFile -Value "[$timestamp] $msg"
+}
+
+function Lock-ActiveSession {
+    try {
+        $sessionLine = query.exe session | Where-Object { $_ -match "Active" } | Select-Object -First 1
+        if ($sessionLine) {
+            $sessionId = ($sessionLine -replace '\s+', ' ').Trim() -split ' ' |
+                Where-Object { $_ -match '^\d+$' } | Select-Object -First 1
+            if ($sessionId) {
+                Write-Log "Locking session ID $sessionId"
+                & tscon.exe $sessionId /dest:console
+            } else {
+                Write-Log "Could not parse session ID from: $sessionLine"
+            }
+        } else {
+            Write-Log "No active session found to lock"
+        }
+    } catch {
+        Write-Log "Lock-ActiveSession error: $_"
+    }
 }
 
 function Get-CardPresent {
@@ -13,7 +37,6 @@ function Get-CardPresent {
     }
 }
 
-# Check if card is already present at startup
 $cardPresent = Get-CardPresent
 $armed = [bool]$cardPresent
 
@@ -42,7 +65,7 @@ Unregister-Event -SourceIdentifier "CardRemoved"  -ErrorAction SilentlyContinue
 Register-WmiEvent -Query $insertQuery -Action $insertedAction -SourceIdentifier "CardInserted" | Out-Null
 Register-WmiEvent -Query $deleteQuery  -Action $deletedAction  -SourceIdentifier "CardRemoved"  | Out-Null
 
-Write-Log "Monitoring started (Identive SCR33xx + HID Omnikey 5022)"
+Write-Log "Monitoring started as SYSTEM (Identive SCR33xx + HID Omnikey 5022)"
 
 while ($true) {
     if (Test-Path $triggerFile) {
@@ -53,8 +76,8 @@ while ($true) {
             $armed = $true
             Write-Log "Card inserted — removal watch armed"
         } elseif ($content -eq "Deleted" -and $armed) {
-            Write-Log "Card removed — locking workstation"
-            rundll32.exe user32.dll,LockWorkStation
+            Write-Log "Card removed — locking active session"
+            Lock-ActiveSession
             $armed = $false
         } elseif ($content -eq "Deleted" -and -not $armed) {
             Write-Log "Card removed — not armed, ignoring"

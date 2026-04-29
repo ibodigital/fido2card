@@ -51,12 +51,27 @@ powershell.exe -ExecutionPolicy Bypass -File fido2lock.ps1
 To run it minimised at startup, create a scheduled task:
 
 ```powershell
-$action  = New-ScheduledTaskAction -Execute "powershell.exe" `
-               -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File C:\Scripts\fido2lock.ps1"
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0
-Register-ScheduledTask -TaskName "FIDO2 Lock" -Action $action -Trigger $trigger `
-    -Settings $settings -RunLevel Highest -Force
+$action = New-ScheduledTaskAction -Execute "C:\Scripts\fido2lock.exe"
+
+$trigger = New-ScheduledTaskTrigger -AtStartup
+
+$settings = New-ScheduledTaskSettingsSet `
+    -ExecutionTimeLimit 0 `
+    -RestartCount 3 `
+    -RestartInterval (New-TimeSpan -Minutes 1)
+
+$principal = New-ScheduledTaskPrincipal `
+    -UserId "SYSTEM" `
+    -LogonType ServiceAccount `
+    -RunLevel Highest
+
+Register-ScheduledTask `
+    -TaskName "FIDO2 Lock" `
+    -Action $action `
+    -Trigger $trigger `
+    -Settings $settings `
+    -Principal $principal `
+    -Force
 ```
 
 ## Compile to EXE
