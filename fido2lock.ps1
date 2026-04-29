@@ -12,19 +12,29 @@ function Write-Log($msg) {
 
 function Lock-ActiveSession {
     try {
-        $sessionLine = query.exe session | Where-Object { $_ -match "Active" } | Select-Object -First 1
-        if ($sessionLine) {
-            $sessionId = ($sessionLine -replace '\s+', ' ').Trim() -split ' ' |
-                Where-Object { $_ -match '^\d+$' } | Select-Object -First 1
-            if ($sessionId) {
-                Write-Log "Locking session ID $sessionId"
-                & tscon.exe $sessionId /dest:console
-            } else {
-                Write-Log "Could not parse session ID from: $sessionLine"
-            }
-        } else {
-            Write-Log "No active session found to lock"
+        $explorerProcesses = Get-WmiObject Win32_Process -Filter "Name='explorer.exe'"
+
+        if (-not $explorerProcesses) {
+            Write-Log "No explorer.exe found — no user appears to be logged in"
+            return
         }
+
+        foreach ($proc in $explorerProcesses) {
+            Write-Log "Found explorer.exe in session $($proc.SessionId) — firing lock task"
+        }
+
+        $action    = New-ScheduledTaskAction -Execute "rundll32.exe" -Argument "user32.dll,LockWorkStation"
+        $principal = New-ScheduledTaskPrincipal -GroupId "BUILTIN\Users" -RunLevel Limited
+        $settings  = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds 30)
+
+        Register-ScheduledTask -TaskName "FIDO2LockNow" -Action $action `
+            -Principal $principal -Settings $settings -Force | Out-Null
+
+        Start-ScheduledTask -TaskName "FIDO2LockNow"
+        Start-Sleep -Seconds 2
+        Unregister-ScheduledTask -TaskName "FIDO2LockNow" -Confirm:$false
+
+        Write-Log "Lock task executed and cleaned up"
     } catch {
         Write-Log "Lock-ActiveSession error: $_"
     }

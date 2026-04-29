@@ -48,32 +48,6 @@ Run the script in an **elevated PowerShell session** (Run as Administrator):
 powershell.exe -ExecutionPolicy Bypass -File fido2lock.ps1
 ```
 
-To run it minimised at startup, create a scheduled task:
-
-```powershell
-$action = New-ScheduledTaskAction -Execute "C:\Scripts\fido2lock.exe"
-
-$trigger = New-ScheduledTaskTrigger -AtStartup
-
-$settings = New-ScheduledTaskSettingsSet `
-    -ExecutionTimeLimit 0 `
-    -RestartCount 3 `
-    -RestartInterval (New-TimeSpan -Minutes 1)
-
-$principal = New-ScheduledTaskPrincipal `
-    -UserId "SYSTEM" `
-    -LogonType ServiceAccount `
-    -RunLevel Highest
-
-Register-ScheduledTask `
-    -TaskName "FIDO2 Lock" `
-    -Action $action `
-    -Trigger $trigger `
-    -Settings $settings `
-    -Principal $principal `
-    -Force
-```
-
 ## Compile to EXE
 
 There's no native way to compile PowerShell to a true executable, but the standard tool used for this is PS2EXE. It wraps the script in a .NET executable that bundles a PowerShell host.
@@ -112,22 +86,29 @@ If you're deploying via your RMM or AD, signing the exe with a code signing cert
 The cleanest way for a background admin process like this is a Scheduled Task, since it handles elevation automatically and survives across user switches.
 Run this once in an elevated PowerShell to register it:
 
-```
+To run it minimised at startup, create a scheduled task:
+
+```powershell
 $action = New-ScheduledTaskAction -Execute "C:\Scripts\fido2lock.exe"
 
-$trigger = New-ScheduledTaskTrigger -AtLogOn
+$trigger = New-ScheduledTaskTrigger -AtStartup
 
 $settings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit 0 `
     -RestartCount 3 `
     -RestartInterval (New-TimeSpan -Minutes 1)
 
+$principal = New-ScheduledTaskPrincipal `
+    -UserId "SYSTEM" `
+    -LogonType ServiceAccount `
+    -RunLevel Highest
+
 Register-ScheduledTask `
     -TaskName "FIDO2 Lock" `
     -Action $action `
     -Trigger $trigger `
     -Settings $settings `
-    -RunLevel Highest `
+    -Principal $principal `
     -Force
 ```
 
@@ -139,7 +120,11 @@ Then to manage it:
 
 ```
 # Check it's registered
-Get-ScheduledTask -TaskName "FIDO2 Lock"
+Get-ScheduledTask -TaskName "FIDO2 Lock" | Select-Object TaskName, TaskPath, State, @{
+    Name="RunAs"; Expression={ $_.Principal.UserId }
+}, @{
+    Name="Trigger"; Expression={ $_.Triggers.CimClass.CimClassName }
+}
 
 # Start it manually right now without rebooting
 Start-ScheduledTask -TaskName "FIDO2 Lock"
