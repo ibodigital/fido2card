@@ -20,16 +20,12 @@ function Lock-ActiveSession {
         }
 
         foreach ($proc in $explorerProcesses) {
-            Write-Log "Found explorer.exe in session $($proc.SessionId) — firing lock"
+            $sessionId = $proc.SessionId
+            Write-Log "Found explorer.exe in session $sessionId — disconnecting session"
+            $null = & tsdiscon.exe $sessionId 2>&1
         }
 
-        # Create, run and delete the task using schtasks.exe — no UI dependency
-        $null = & schtasks.exe /Create /TN "FIDO2LockNow" /TR "rundll32.exe user32.dll,LockWorkStation" /SC ONCE /ST 00:00 /RU "BUILTIN\Users" /IT /F 2>&1
-        $null = & schtasks.exe /Run /TN "FIDO2LockNow" 2>&1
-        Start-Sleep -Seconds 2
-        $null = & schtasks.exe /Delete /TN "FIDO2LockNow" /F 2>&1
-
-        Write-Log "Lock task executed and cleaned up"
+        Write-Log "Session disconnect issued"
     } catch {
         Write-Log "Lock-ActiveSession error: $_"
     }
