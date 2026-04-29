@@ -1,4 +1,4 @@
-# fido2lock - System Tray Version
+# fido2lock - Windows System Tray Version
 
 Locks the Windows workstation when a FIDO2/PIV smart card is removed from a supported reader. Designed for shared workstations where users sign in with smart cards and the desktop must lock immediately on card removal.
 
@@ -39,16 +39,22 @@ Includes a system tray app letting users temporarily pause the auto-lock (e.g. f
 
 The service runs once per machine (as SYSTEM) and never stops. The tray app starts in each user's session and only writes to the shared pause file. They communicate via that file, so no network sockets, named pipes, or IPC complexity.
 
-## Repository contents
+## Repository layout
 
-| File                    | Purpose                                                |
-| ----------------------- | ------------------------------------------------------ |
-| `fido2lock-service.ps1` | Service script (compiled to .exe) — monitors and locks |
-| `fido2lock-tray.ps1`    | Tray script (compiled to .exe) — pause UI              |
-| `build.ps1`             | Compiles both scripts to .exe with PS2EXE              |
-| `deploy.ps1`            | Installs both exes and registers scheduled tasks       |
-| `uninstall.ps1`         | Removes everything cleanly                             |
-| `README.md`             | This file                                              |
+```
+fido2lock/
+├── fido2lock-service.ps1     ← Service source
+├── fido2lock-tray.ps1        ← Tray source
+├── build.ps1                 ← Compiles both .ps1 → bin\
+├── deploy.ps1                ← Reads from bin\ and installs
+├── uninstall.ps1             ← Removes everything
+├── README.md
+└── bin\                      ← Created by build.ps1
+    ├── fido2lock-service.exe
+    └── fido2lock-tray.exe
+```
+
+The `bin\` folder is git-ignored (or should be) — sources are tracked, compiled binaries are built per machine.
 
 ## Requirements
 
@@ -73,28 +79,28 @@ On your build machine:
 ```powershell
 git clone <repo-url> fido2lock
 cd fido2lock
-powershell.exe -ExecutionPolicy Bypass -File .\build.ps1
+.\build.ps1
 ```
 
 This produces:
 
-- `fido2lock-service.exe` (no console, requires admin)
-- `fido2lock-tray.exe` (no console, runs as user)
+- `bin\fido2lock-service.exe` (no console, requires admin)
+- `bin\fido2lock-tray.exe` (no console, runs as user)
 
 ## Deploy
 
-Copy the entire folder (including the two newly built exes) to the target machine, then:
+Copy the entire folder (including `bin\` with the freshly built exes) to the target machine, then:
 
 ```powershell
 # Open elevated PowerShell on the target
 cd C:\path\to\fido2lock
-powershell.exe -ExecutionPolicy Bypass -File .\deploy.ps1
+.\deploy.ps1
 ```
 
 This will:
 
 1. Remove any existing FIDO2-related scheduled tasks
-2. Copy both exes to `C:\Program Files\fido2lock\`
+2. Copy both exes from `bin\` to `C:\Program Files\fido2lock\`
 3. Create `C:\ProgramData\fido2lock\` with `Users` granted Modify
 4. Register **FIDO2 Lock Service** task — runs as SYSTEM at startup
 5. Register **FIDO2 Lock Tray** task — runs at every user logon
@@ -194,15 +200,17 @@ Or to keep the logs for audit:
 
 ## Troubleshooting
 
-| Symptom                                       | Likely cause                                       | Fix                                                                                    |
-| --------------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Tray icon never appears                       | Tray task disabled or PS2EXE produced a broken exe | Run `Start-ScheduledTask -TaskName "FIDO2 Lock Tray"` and check Task Scheduler history |
-| Lock fires but session opens explorer instead | Old version using `rundll32` still installed       | Run `uninstall.ps1` then `deploy.ps1` again                                            |
-| Service log shows "tsdiscon" errors           | Windows Home edition (no `tsdiscon.exe`)           | Replace with a different lock approach — file an issue                                 |
-| Card removal not detected                     | Reader uses a different DeviceID pattern           | See [Adding more reader models](#adding-more-reader-models)                            |
-| "Lock-ActiveSession error" in log             | Permissions or session enumeration failed          | Confirm service is running as SYSTEM, not a regular user                               |
-| Tray app shows "service is not installed"     | `C:\ProgramData\fido2lock` missing                 | Run `deploy.ps1`                                                                       |
-| Pause file written but lock still fires       | Service can't read pause file                      | Check ACL on `C:\ProgramData\fido2lock` — Users should have Modify                     |
+| Symptom                                             | Likely cause                                       | Fix                                                                                    |
+| --------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `bin directory not found` on deploy                 | Forgot to run build.ps1 first                      | Run `.\build.ps1` then re-run `.\deploy.ps1`                                           |
+| Tray icon never appears                             | Tray task disabled or PS2EXE produced a broken exe | Run `Start-ScheduledTask -TaskName "FIDO2 Lock Tray"` and check Task Scheduler history |
+| Lock fires but session opens explorer instead       | Old version using `rundll32` still installed       | Run `uninstall.ps1` then `deploy.ps1` again                                            |
+| Service log shows "tsdiscon" errors                 | Windows Home edition (no `tsdiscon.exe`)           | Replace with a different lock approach — file an issue                                 |
+| Card removal not detected                           | Reader uses a different DeviceID pattern           | See [Adding more reader models](#adding-more-reader-models)                            |
+| "Lock-ActiveSession error" in log                   | Permissions or session enumeration failed          | Confirm service is running as SYSTEM, not a regular user                               |
+| `Identitätsverweise` / `IdentityNotMappedException` | Old version using `BUILTIN\Users` literal          | Update to current scripts which use SID `S-1-5-32-545`                                 |
+| Tray app shows "service is not installed"           | `C:\ProgramData\fido2lock` missing                 | Run `deploy.ps1`                                                                       |
+| Pause file written but lock still fires             | Service can't read pause file                      | Check ACL on `C:\ProgramData\fido2lock` — Users should have Modify                     |
 
 ## Security notes
 

@@ -1,5 +1,6 @@
 # deploy.ps1
 # Installs/updates the FIDO2 Lock service and tray app.
+# Reads exes from .\bin\
 # Run as Administrator on the target machine.
 
 #Requires -RunAsAdministrator
@@ -12,16 +13,20 @@ $ErrorActionPreference = "Stop"
 
 Write-Host "=== FIDO2 Lock Deployment ===" -ForegroundColor Cyan
 
-# --- 1. Verify required exes exist in script folder ---
+# --- 1. Verify required exes exist in bin folder ---
 $scriptDir   = $PSScriptRoot
-$serviceExe  = Join-Path $scriptDir "fido2lock-service.exe"
-$trayExe     = Join-Path $scriptDir "fido2lock-tray.exe"
+$binDir      = Join-Path $scriptDir "bin"
+$serviceExe  = Join-Path $binDir "fido2lock-service.exe"
+$trayExe     = Join-Path $binDir "fido2lock-tray.exe"
 
+if (-not (Test-Path $binDir)) {
+    throw "bin directory not found at $binDir. Run build.ps1 first."
+}
 if (-not (Test-Path $serviceExe)) {
-    throw "fido2lock-service.exe not found in $scriptDir. Run build.ps1 first."
+    throw "fido2lock-service.exe not found in $binDir. Run build.ps1 first."
 }
 if (-not (Test-Path $trayExe)) {
-    throw "fido2lock-tray.exe not found in $scriptDir. Run build.ps1 first."
+    throw "fido2lock-tray.exe not found in $binDir. Run build.ps1 first."
 }
 
 # --- 2. Remove any existing scheduled tasks ---
