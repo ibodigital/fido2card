@@ -73,7 +73,7 @@ On your build machine:
 ```powershell
 git clone <repo-url> fido2lock
 cd fido2lock
-.\build.ps1
+powershell.exe -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
 This produces:
@@ -88,7 +88,7 @@ Copy the entire folder (including the two newly built exes) to the target machin
 ```powershell
 # Open elevated PowerShell on the target
 cd C:\path\to\fido2lock
-.\deploy.ps1
+powershell.exe -ExecutionPolicy Bypass -File .\deploy.ps1
 ```
 
 This will:

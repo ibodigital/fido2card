@@ -11,10 +11,12 @@ $pauseFile   = Join-Path $basePath "pause-until.txt"
 
 if (-not (Test-Path $basePath)) {
     New-Item -ItemType Directory -Path $basePath | Out-Null
-    # Allow Users to read/write pause file (tray app needs to write it)
+    # Allow Users group to read/write pause file (tray app needs to write it).
+    # Use SID S-1-5-32-545 so this works on any Windows locale.
+    $usersSid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-545")
     $acl = Get-Acl $basePath
     $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-        "BUILTIN\Users", "Modify", "ContainerInherit,ObjectInherit", "None", "Allow")
+        $usersSid, "Modify", "ContainerInherit,ObjectInherit", "None", "Allow")
     $acl.AddAccessRule($rule)
     Set-Acl -Path $basePath -AclObject $acl
 }

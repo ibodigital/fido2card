@@ -41,17 +41,19 @@ Copy-Item $trayExe    -Destination $InstallDir -Force
 Write-Host "    Installed: fido2lock-service.exe, fido2lock-tray.exe"
 
 # --- 4. Create ProgramData folder with permissions ---
+# Use SID S-1-5-32-545 (BUILTIN\Users) to support all Windows locales
 Write-Host "`n[3/5] Creating C:\ProgramData\fido2lock with permissions..." -ForegroundColor Yellow
 $dataDir = "C:\ProgramData\fido2lock"
 if (-not (Test-Path $dataDir)) {
     New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
 }
+$usersSid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-545")
 $acl = Get-Acl $dataDir
 $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-    "BUILTIN\Users", "Modify", "ContainerInherit,ObjectInherit", "None", "Allow")
+    $usersSid, "Modify", "ContainerInherit,ObjectInherit", "None", "Allow")
 $acl.AddAccessRule($rule)
 Set-Acl -Path $dataDir -AclObject $acl
-Write-Host "    Permissions set: BUILTIN\Users granted Modify"
+Write-Host "    Permissions set: Users (S-1-5-32-545) granted Modify"
 
 # --- 5. Register service task (SYSTEM, AtStartup) ---
 Write-Host "`n[4/5] Registering service task (runs as SYSTEM at boot)..." -ForegroundColor Yellow
@@ -78,6 +80,7 @@ Register-ScheduledTask `
 Write-Host "    Registered: FIDO2 Lock Service"
 
 # --- 6. Register tray task (per user, AtLogOn) ---
+# Use SID S-1-5-32-545 (Users) to support all Windows locales
 Write-Host "`n[5/5] Registering tray task (runs at user logon)..." -ForegroundColor Yellow
 $trayAction    = New-ScheduledTaskAction -Execute (Join-Path $InstallDir "fido2lock-tray.exe")
 $trayTrigger   = New-ScheduledTaskTrigger -AtLogOn
@@ -86,7 +89,7 @@ $traySettings  = New-ScheduledTaskSettingsSet `
                     -AllowStartIfOnBatteries `
                     -DontStopIfGoingOnBatteries
 $trayPrincipal = New-ScheduledTaskPrincipal `
-                    -GroupId "BUILTIN\Users" `
+                    -GroupId "S-1-5-32-545" `
                     -RunLevel Limited
 
 Register-ScheduledTask `
