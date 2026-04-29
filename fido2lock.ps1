@@ -1,15 +1,22 @@
 $triggerFile = Join-Path $env:TEMP "fido2trigger.txt"
+$logFile = Join-Path $env:TEMP "fido2lock.log"
+
+function Write-Log($msg) {
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Add-Content -Path $logFile -Value "[$timestamp] $msg"
+}
 
 # Check if card is already present at startup
 $cardPresent = Get-WmiObject Win32_PnPEntity |
     Where-Object { $_.DeviceID -like "SCFILTER*IDENTIVE*" }
 
-if (-not $cardPresent) {
-    Write-Host "No card present at startup — waiting for insertion before arming removal watch."
-}
-
-# Track whether we should lock on removal
 $armed = [bool]$cardPresent
+
+if ($armed) {
+    Write-Log "Startup: card already present — removal watch armed"
+} else {
+    Write-Log "Startup: no card present — waiting for insertion before arming"
+}
 
 $insertQuery = "SELECT * FROM __InstanceCreationEvent WITHIN 2 " +
                "WHERE TargetInstance ISA 'Win32_PnPEntity' " +
@@ -28,7 +35,7 @@ Unregister-Event -SourceIdentifier "CardRemoved"  -ErrorAction SilentlyContinue
 Register-WmiEvent -Query $insertQuery -Action $insertedAction -SourceIdentifier "CardInserted" | Out-Null
 Register-WmiEvent -Query $deleteQuery  -Action $deletedAction  -SourceIdentifier "CardRemoved"  | Out-Null
 
-Write-Host "Monitoring started. Armed: $armed"
+Write-Log "Monitoring started"
 
 while ($true) {
     if (Test-Path $triggerFile) {
@@ -37,13 +44,13 @@ while ($true) {
 
         if ($content -eq "Inserted") {
             $armed = $true
-            Write-Host "Card inserted — removal watch armed"
+            Write-Log "Card inserted — removal watch armed"
         } elseif ($content -eq "Deleted" -and $armed) {
-            Write-Host "Card removed — locking workstation"
+            Write-Log "Card removed — locking workstation"
             rundll32.exe user32.dll,LockWorkStation
-            $armed = $false  # disarm until card is inserted again
+            $armed = $false
         } elseif ($content -eq "Deleted" -and -not $armed) {
-            Write-Host "Card removed but not armed — ignoring"
+            Write-Log "Card removed — not armed, ignoring"
         }
     }
     Start-Sleep -Seconds 1

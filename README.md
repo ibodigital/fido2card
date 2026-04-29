@@ -68,15 +68,19 @@ There's no native way to compile PowerShell to a true executable, but the standa
 Install-Module -Name ps2exe -Scope CurrentUser -Force
 
 # Compile your script
-Invoke-PS2EXE -InputFile fido2lock.ps1 -OutputFile fido2lock.exe -NoConsole -RequireAdmin
+Invoke-PS2EXE -InputFile fido2lock.ps1 -OutputFile fido2lock.exe -NoConsole -RequireAdmin -NoOutput
 ```
 
 The flags used:
 
-```
--NoConsole — runs without a console window (good for a background lock monitor)
+- NoConsole — runs without a console window (good for a background lock monitor)
+- RequireAdmin — embeds a UAC manifest so it automatically requests elevation on launch
+- NoOutput suppresses all output. But if you want to keep logging for debugging purposes, write to a file instead of the console
 
--RequireAdmin — embeds a UAC manifest so it automatically requests elevation on launch
+Log file will be at %TEMP%\fido2lock.log — you can tail it any time to confirm it's working:
+
+```
+Get-Content "$env:TEMP\fido2lock.log" -Wait
 ```
 
 ### What you get
