@@ -6,10 +6,15 @@ function Write-Log($msg) {
     Add-Content -Path $logFile -Value "[$timestamp] $msg"
 }
 
-# Check if card is already present at startup
-$cardPresent = Get-WmiObject Win32_PnPEntity |
-    Where-Object { $_.DeviceID -like "SCFILTER*IDENTIVE*" }
+function Get-CardPresent {
+    Get-WmiObject Win32_PnPEntity | Where-Object {
+        $_.DeviceID -like "SCFILTER*IDENTIVE*" -or
+        $_.DeviceID -like "SCFILTER*OMNIKEY*"
+    }
+}
 
+# Check if card is already present at startup
+$cardPresent = Get-CardPresent
 $armed = [bool]$cardPresent
 
 if ($armed) {
@@ -20,11 +25,13 @@ if ($armed) {
 
 $insertQuery = "SELECT * FROM __InstanceCreationEvent WITHIN 2 " +
                "WHERE TargetInstance ISA 'Win32_PnPEntity' " +
-               "AND TargetInstance.DeviceID LIKE 'SCFILTER%IDENTIVE%'"
+               "AND (TargetInstance.DeviceID LIKE 'SCFILTER%IDENTIVE%' " +
+               "OR TargetInstance.DeviceID LIKE 'SCFILTER%OMNIKEY%')"
 
 $deleteQuery  = "SELECT * FROM __InstanceDeletionEvent WITHIN 2 " +
                "WHERE TargetInstance ISA 'Win32_PnPEntity' " +
-               "AND TargetInstance.DeviceID LIKE 'SCFILTER%IDENTIVE%'"
+               "AND (TargetInstance.DeviceID LIKE 'SCFILTER%IDENTIVE%' " +
+               "OR TargetInstance.DeviceID LIKE 'SCFILTER%OMNIKEY%')"
 
 $insertedAction = [scriptblock]::Create("Set-Content -Path '$triggerFile' -Value 'Inserted'")
 $deletedAction  = [scriptblock]::Create("Set-Content -Path '$triggerFile' -Value 'Deleted'")
@@ -35,7 +42,7 @@ Unregister-Event -SourceIdentifier "CardRemoved"  -ErrorAction SilentlyContinue
 Register-WmiEvent -Query $insertQuery -Action $insertedAction -SourceIdentifier "CardInserted" | Out-Null
 Register-WmiEvent -Query $deleteQuery  -Action $deletedAction  -SourceIdentifier "CardRemoved"  | Out-Null
 
-Write-Log "Monitoring started"
+Write-Log "Monitoring started (Identive SCR33xx + HID Omnikey 5022)"
 
 while ($true) {
     if (Test-Path $triggerFile) {
