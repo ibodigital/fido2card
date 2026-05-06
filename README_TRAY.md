@@ -4,6 +4,12 @@ Locks the Windows workstation when a FIDO2/PIV smart card is removed from a supp
 
 Includes a system tray app letting users temporarily pause the auto-lock (e.g. for short breaks where the card stays at home).
 
+> **Two variants are available:**
+> - **fido2lock** (this section) — locks on card *removal*
+> - **fido2switch** ([see below](#alternative-variant-fido2switch--user-switching-on-tap)) — does nothing on removal; disconnects the active session when a *different* card is tapped, so the next user can log in
+>
+> Pick one — they share scheduled-task names and shouldn't both be installed on the same machine.
+
 ## Features
 
 - Watches smart card readers for card removal via WMI events
@@ -43,15 +49,22 @@ The service runs once per machine (as SYSTEM) and never stops. The tray app star
 
 ```
 fido2lock/
-├── fido2lock-service.ps1     ← Service source
-├── fido2lock-tray.ps1        ← Tray source
-├── build.ps1                 ← Compiles both .ps1 → bin\
-├── deploy.ps1                ← Reads from bin\ and installs
-├── uninstall.ps1             ← Removes everything
+├── fido2lock-service.ps1       ← Lock-on-removal service source
+├── fido2lock-tray.ps1          ← Lock-on-removal tray source
+├── build.ps1                   ← Compiles lock variant → bin\
+├── deploy.ps1                  ← Installs lock variant
+├── uninstall.ps1               ← Removes lock variant
+├── fido2switch-service.ps1     ← User-switching service source (alt variant)
+├── fido2switch-tray.ps1        ← User-switching tray source
+├── build-switch.ps1            ← Compiles switch variant → bin\
+├── deploy-switch.ps1           ← Installs switch variant
+├── uninstall-switch.ps1        ← Removes switch variant
 ├── README.md
-└── bin\                      ← Created by build.ps1
+└── bin\                        ← Created by build.ps1 / build-switch.ps1
     ├── fido2lock-service.exe
-    └── fido2lock-tray.exe
+    ├── fido2lock-tray.exe
+    ├── fido2switch-service.exe
+    └── fido2switch-tray.exe
 ```
 
 The `bin\` folder is git-ignored (or should be) — sources are tracked, compiled binaries are built per machine.
@@ -198,6 +211,142 @@ Or to keep the logs for audit:
 .\uninstall.ps1 -KeepLogs
 ```
 
+## Alternative variant: fido2switch — user-switching on tap
+
+Same architecture, different behaviour:
+
+- **Card removal does nothing.**
+- **Tapping a *different* card** on the reader disconnects the active session via `tsdiscon.exe`, so the new user can log in.
+- Tapping the **same** card again is a no-op.
+
+Intended for shared/kiosk workstations where users hand-off the machine by tapping their card without first signing the previous user out.
+
+### How card identity is determined
+
+On every insertion event, the service uses PC/SC (`winscard.dll`) to send APDU `FF CA 00 00 00` to the card and reads the returned UID/serial. The UID is hex-encoded and stored in `C:\ProgramData\fido2switch\current-card.txt`. On the next insertion:
+
+- New UID == stored UID → no action (same user re-tapping)
+- New UID != stored UID → `tsdiscon` the active session, then update the file
+- No stored UID yet → record this card as the current one (no disconnect)
+
+If `FF CA` returns a non-success status (e.g. `6A 81` "function not supported", which some contact-mode PIV cards return), the service logs the failure and skips the disconnect rather than acting on bad data. This means the variant is best suited to **contactless** readers (HID Omnikey 5022 with PIV-over-NFC, or any MIFARE-style card) where `FF CA` reliably returns the card's contactless serial. For pure contact PIV cards you may need to extend the service to read the PIV CHUID instead.
+
+### Files
+
+```
+fido2switch-service.ps1     ← Service source (insertion + UID compare + tsdiscon)
+fido2switch-tray.ps1        ← Tray source (status + pause)
+build-switch.ps1            ← Compiles both .ps1 → bin\
+deploy-switch.ps1           ← Reads from bin\ and installs
+uninstall-switch.ps1        ← Removes everything
+```
+
+The compiled exes land in the same `bin\` directory as the lock variant (`fido2switch-service.exe`, `fido2switch-tray.exe`).
+
+### Install paths
+
+```
+C:\Program Files\fido2switch\         ← exes
+C:\ProgramData\fido2switch\           ← logs, pause file, current-card.txt
+```
+
+These are deliberately distinct from the `fido2lock` paths so the two variants don't share state. **Scheduled tasks are not distinct** — `deploy-switch.ps1` removes any existing `FIDO2*` task before installing, on the assumption you only want one variant active.
+
+### Build
+
+```powershell
+# On the build machine (run as Administrator)
+powershell.exe -ExecutionPolicy Bypass -File .\build-switch.ps1
+```
+
+Produces `bin\fido2switch-service.exe` and `bin\fido2switch-tray.exe`.
+
+### Deploy
+
+Copy the entire folder (including `bin\` with the freshly built exes) to the target machine, then:
+
+```powershell
+# Open elevated PowerShell on the target
+cd C:\path\to\fido2card
+powershell.exe -ExecutionPolicy Bypass -File .\deploy-switch.ps1
+```
+
+This will:
+
+1. Remove **all** existing `FIDO2*` scheduled tasks (including any `FIDO2 Lock *` tasks — the two variants are mutually exclusive)
+2. Copy both exes from `bin\` to `C:\Program Files\fido2switch\`
+3. Create `C:\ProgramData\fido2switch\` with `Users` granted Modify
+4. Register **FIDO2 Switch Service** task — runs as SYSTEM at startup
+5. Register **FIDO2 Switch Tray** task — runs at every user logon
+6. Start the service immediately (no reboot needed)
+
+To start the tray for your current session without logging out:
+
+```powershell
+Start-ScheduledTask -TaskName "FIDO2 Switch Tray"
+```
+
+#### Custom install path
+
+```powershell
+.\deploy-switch.ps1 -InstallDir "D:\Tools\fido2switch"
+```
+
+### Verify
+
+```powershell
+Get-ScheduledTask -TaskName "FIDO2 Switch Service", "FIDO2 Switch Tray" |
+    Select-Object TaskName, State, @{N="RunAs";E={$_.Principal.UserId}}
+
+Get-Content "C:\ProgramData\fido2switch\service.log" -Wait
+```
+
+A successful first tap looks like:
+
+```
+[...] Switch service started as SYSTEM (Identive SCR33xx + HID Omnikey 5022)
+[...] First card seen (uid=04A3B91C2D5E80) — recording; no previous session to disconnect
+```
+
+A user-switch looks like:
+
+```
+[...] Card change: 04A3B91C2D5E80 -> 0419FF7822AB81 — disconnecting active session
+[...] Disconnecting session 2
+```
+
+### Tray UX
+
+The right-click menu shows:
+
+- **FIDO2 Switch — active** (status)
+- **Current card: 04A3B91C2D5E80** (current UID, or `—` if none recorded yet)
+- **Pause 5 / 15 / 60 minutes** — while paused, a different card tap is logged but does *not* disconnect
+- **Resume now**
+- **Exit tray**
+
+The pause file format is identical to the lock variant (ISO 8601 timestamp), just at `C:\ProgramData\fido2switch\pause-until.txt`.
+
+### Resetting the recorded card
+
+If the recorded UID gets out of sync (e.g. you swapped cards while the service was paused), wipe it:
+
+```powershell
+Remove-Item "C:\ProgramData\fido2switch\current-card.txt" -Force
+```
+
+The next tap will be treated as a fresh "first card" — recorded with no disconnect.
+
+### Uninstall
+
+```powershell
+.\uninstall-switch.ps1
+# or, to keep the log + current-card.txt for audit:
+.\uninstall-switch.ps1 -KeepLogs
+```
+
+`uninstall-switch.ps1` only removes `FIDO2 Switch *` tasks; if you also have the lock variant installed, run `uninstall.ps1` separately.
+
 ## Troubleshooting
 
 | Symptom                                             | Likely cause                                       | Fix                                                                                    |
@@ -211,6 +360,9 @@ Or to keep the logs for audit:
 | `Identitätsverweise` / `IdentityNotMappedException` | Old version using `BUILTIN\Users` literal          | Update to current scripts which use SID `S-1-5-32-545`                                 |
 | Tray app shows "service is not installed"           | `C:\ProgramData\fido2lock` missing                 | Run `deploy.ps1`                                                                       |
 | Pause file written but lock still fires             | Service can't read pause file                      | Check ACL on `C:\ProgramData\fido2lock` — Users should have Modify                     |
+| (switch) Log says "UID could not be read"           | Card returned `6A 81` to `FF CA` (contact PIV)     | Switch variant relies on contactless serial — use Omnikey 5022 / NFC, or extend the service to read PIV CHUID |
+| (switch) Same card tap keeps disconnecting          | Stored UID corrupted / out of sync                 | `Remove-Item C:\ProgramData\fido2switch\current-card.txt` and tap once to re-record    |
+| (switch) Both variants installed at once            | One overwrote the other's tasks                    | Run the matching `uninstall*.ps1` for the variant you don't want, then redeploy        |
 
 ## Security notes
 
