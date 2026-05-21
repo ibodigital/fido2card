@@ -111,7 +111,6 @@ Write-Host "    Registered: FIDO2 Switch Tray"
 # --- 7. Start service immediately ---
 Write-Host "`nStarting service now..." -ForegroundColor Yellow
 Start-ScheduledTask -TaskName "FIDO2 Switch Service"
-Start-Sleep -Seconds 2
 
 Write-Host "`n=== Deployment complete ===" -ForegroundColor Green
 Write-Host "`nNext steps:"

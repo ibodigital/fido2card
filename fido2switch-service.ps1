@@ -180,7 +180,7 @@ function Test-SwitchPaused {
 
 function Disconnect-ActiveSession {
     try {
-        $explorerProcesses = Get-WmiObject Win32_Process -Filter "Name='explorer.exe'"
+        $explorerProcesses = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'"
         if (-not $explorerProcesses) {
             Write-Log "No explorer.exe found — no active user to disconnect"
             return
@@ -196,9 +196,8 @@ function Disconnect-ActiveSession {
 }
 
 function Get-StoredUid {
-    if (-not (Test-Path $currentCardFile)) { return $null }
     try {
-        $u = (Get-Content $currentCardFile -Raw).Trim()
+        $u = (Get-Content $currentCardFile -Raw -ErrorAction Stop).Trim()
         if ($u) { return $u }
     } catch { }
     return $null
@@ -214,7 +213,7 @@ $insertQuery = "SELECT * FROM __InstanceCreationEvent WITHIN 2 " +
 $insertedAction = [scriptblock]::Create("Set-Content -Path '$triggerFile' -Value 'Inserted'")
 
 Unregister-Event -SourceIdentifier "CardInserted" -ErrorAction SilentlyContinue
-Register-WmiEvent -Query $insertQuery -Action $insertedAction -SourceIdentifier "CardInserted" | Out-Null
+Register-CimIndicationEvent -Query $insertQuery -Action $insertedAction -SourceIdentifier "CardInserted" | Out-Null
 
 Write-Log "Switch service started as SYSTEM (Identive SCR33xx + HID Omnikey 5022)"
 

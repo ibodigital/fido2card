@@ -46,7 +46,7 @@ function Test-LockPaused {
 
 function Lock-ActiveSession {
     try {
-        $explorerProcesses = Get-WmiObject Win32_Process -Filter "Name='explorer.exe'"
+        $explorerProcesses = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'"
 
         if (-not $explorerProcesses) {
             Write-Log "No explorer.exe found — no user appears to be logged in"
@@ -64,10 +64,7 @@ function Lock-ActiveSession {
 }
 
 function Get-CardPresent {
-    Get-WmiObject Win32_PnPEntity | Where-Object {
-        $_.DeviceID -like "SCFILTER*IDENTIVE*" -or
-        $_.DeviceID -like "SCFILTER*OMNIKEY*"
-    }
+    Get-CimInstance Win32_PnPEntity -Filter "DeviceID LIKE 'SCFILTER%IDENTIVE%' OR DeviceID LIKE 'SCFILTER%OMNIKEY%'"
 }
 
 # Startup state
@@ -96,8 +93,8 @@ $deletedAction  = [scriptblock]::Create("Set-Content -Path '$triggerFile' -Value
 Unregister-Event -SourceIdentifier "CardInserted" -ErrorAction SilentlyContinue
 Unregister-Event -SourceIdentifier "CardRemoved"  -ErrorAction SilentlyContinue
 
-Register-WmiEvent -Query $insertQuery -Action $insertedAction -SourceIdentifier "CardInserted" | Out-Null
-Register-WmiEvent -Query $deleteQuery  -Action $deletedAction  -SourceIdentifier "CardRemoved"  | Out-Null
+Register-CimIndicationEvent -Query $insertQuery -Action $insertedAction -SourceIdentifier "CardInserted" | Out-Null
+Register-CimIndicationEvent -Query $deleteQuery  -Action $deletedAction  -SourceIdentifier "CardRemoved"  | Out-Null
 
 Write-Log "Monitoring started as SYSTEM (Identive SCR33xx + HID Omnikey 5022)"
 

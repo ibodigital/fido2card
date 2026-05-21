@@ -15,7 +15,7 @@ Write-Host "=== FIDO2 Lock Uninstall ===" -ForegroundColor Cyan
 
 # Stop and remove scheduled tasks
 Write-Host "`nRemoving scheduled tasks..." -ForegroundColor Yellow
-Get-ScheduledTask | Where-Object { $_.TaskName -like "FIDO2*" } | ForEach-Object {
+Get-ScheduledTask | Where-Object { $_.TaskName -like "FIDO2 Lock*" } | ForEach-Object {
     Write-Host "    Removing: $($_.TaskName)"
     Stop-ScheduledTask  -TaskName $_.TaskName -ErrorAction SilentlyContinue
     Unregister-ScheduledTask -TaskName $_.TaskName -TaskPath $_.TaskPath -Confirm:$false
