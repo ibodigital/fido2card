@@ -186,16 +186,16 @@ If the card is already inserted before the lock screen appears, Windows will pro
 
 ## Troubleshooting
 
-| Problem                                                       | Cause                                                         | Fix                                                                                                       |
-| ------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| "Turn on security key sign-in" setting not visible in gpedit  | ADMX template too old                                         | Ensure Windows is updated to 20H1 or later; on domain, update Central Store with latest ADMX files        |
-| Security key option not visible on login screen after restart | Policy not applied or FIDO credential provider not registered | Run `gpresult /r` to verify policy applied; check registry path in Part 2                                 |
-| Device not Entra joined                                       | Machine is pure on-premises AD only                           | FIDO2 Windows login requires Entra ID (joined or hybrid joined)                                           |
-| PIN prompt does not appear after inserting card               | Smart Card service not running                                | Run `Start-Service SCardSvr` as Administrator                                                             |
-| Login screen shows key option but authentication fails        | Key not registered to this user's Entra ID account            | Verify registration at `aka.ms/mysecurityinfo`                                                            |
-| Windows Hello PIN keeps intercepting instead of key           | Windows Hello for Business is the default provider            | On the login screen, click **Sign-in options → Security Key**; or set FIDO as default provider per Part 3 |
-| RDP stopped working after excluding password provider         | Password credential provider was disabled                     | Re-enable `{60b78e88-ead8-445c-9cfd-0b87f74ea6cd}` or do not exclude it on machines used for RDP          |
-| `gpupdate /force` shows no errors but setting is not applied  | GPO scope excludes the machine or user                        | Check GPO WMI filters, security filtering, and OU targeting in GPMC                                       |
+| Problem                                                       | Cause                                                         | Fix                                                                                                      |
+| ------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| "Turn on security key sign-in" setting not visible in gpedit  | ADMX template too old                                         | Ensure Windows is updated to 20H1 or later; on domain, update Central Store with latest ADMX files       |
+| Security key option not visible on login screen after restart | Policy not applied or FIDO credential provider not registered | Run`gpresult /r` to verify policy applied; check registry path in Part 2                                 |
+| Device not Entra joined                                       | Machine is pure on-premises AD only                           | FIDO2 Windows login requires Entra ID (joined or hybrid joined)                                          |
+| PIN prompt does not appear after inserting card               | Smart Card service not running                                | Run`Start-Service SCardSvr` as Administrator                                                             |
+| Login screen shows key option but authentication fails        | Key not registered to this user's Entra ID account            | Verify registration at`aka.ms/mysecurityinfo`                                                            |
+| Windows Hello PIN keeps intercepting instead of key           | Windows Hello for Business is the default provider            | On the login screen, click**Sign-in options → Security Key**; or set FIDO as default provider per Part 3 |
+| RDP stopped working after excluding password provider         | Password credential provider was disabled                     | Re-enable`{60b78e88-ead8-445c-9cfd-0b87f74ea6cd}` or do not exclude it on machines used for RDP          |
+| `gpupdate /force` shows no errors but setting is not applied  | GPO scope excludes the machine or user                        | Check GPO WMI filters, security filtering, and OU targeting in GPMC                                      |
 
 ---
 
